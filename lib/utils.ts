@@ -23,3 +23,16 @@ export function refillPriority(dateIso: string): Priority {
 export function formatDate(dateIso: string) {
   return new Date(dateIso).toLocaleDateString(undefined, { year:"numeric", month:"short", day:"numeric" });
 }
+
+
+export function plural(n: number, s: string) {
+  return `${n} ${s}${n === 1 ? "" : "s"}`;
+}
+
+export function flagReason(dateIso: string): string {
+  const d = daysUntil(dateIso);
+  const when = formatDate(dateIso);
+  if (d < 0) return `Refill date ${when} → overdue by ${plural(Math.abs(d), "day")}`;
+  if (d <= 7) return `Refill date ${when} → due in ${plural(d, "day")}`;
+  return `Refill date ${when} → OK (in ${plural(d, "day")})`;
+}

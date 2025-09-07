@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "./ui/sheet";
 import { Button } from "./ui/button";
 import type { Patient } from "../lib/types";
@@ -9,9 +10,22 @@ import { FileText, Phone } from "lucide-react";
 export function PatientDrawer({
   open, onOpenChange, patient,
 }: { open: boolean; onOpenChange: (v: boolean) => void; patient: Patient | null }) {
+
+  // Extra safety: close on Esc even if focus is outside the sheet root
+  React.useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onOpenChange(false);
+    }
+    if (open) window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onOpenChange]);
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:max-w-lg">
+      <SheetContent
+        side="right"
+        className="w-full sm:max-w-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+      >
         <SheetHeader>
           <SheetTitle>{patient?.name ?? "Patient"}</SheetTitle>
         </SheetHeader>

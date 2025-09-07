@@ -37,6 +37,11 @@ export default function PatientTable() {
       });
   }, [query, filter]);
 
+  function openPatient(p: Patient) {
+    setSelected(p);
+    setOpen(true);
+  }
+
   return (
     <>
       <Card className="p-4">
@@ -61,7 +66,7 @@ export default function PatientTable() {
             </Select>
           </div>
           <div className="text-xs text-muted-foreground">
-            Overdue & due-soon are automatically prioritized.
+            Overdue &amp; due-soon are automatically prioritized.
           </div>
         </div>
 
@@ -79,14 +84,29 @@ export default function PatientTable() {
             </TableHeader>
             <TableBody>
               {rows.map(({ p, prio }) => (
-                <TableRow key={p.id}>
+                <TableRow
+                  key={p.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Open details for ${p.name}`}
+                  onClick={() => openPatient(p)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      openPatient(p);
+                    }
+                  }}
+                  className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                >
                   <TableCell>
                     <div className="font-medium">{p.name}</div>
                     <div className="text-xs text-muted-foreground">{p.phoneE164}</div>
                   </TableCell>
                   <TableCell>{p.medication}</TableCell>
                   <TableCell>{formatDate(p.nextRefillDate)}</TableCell>
-                  <TableCell><StatusBadge priority={prio} /></TableCell>
+                  <TableCell>
+                    <StatusBadge priority={prio} dateIso={p.nextRefillDate} />
+                  </TableCell>
                   <TableCell className="max-w-[360px]">
                     <div className="truncate text-muted-foreground">
                       {p.lastOutcome?.summary ?? p.lastShipmentIssue ?? "—"}
@@ -95,9 +115,9 @@ export default function PatientTable() {
                   <TableCell className="text-right">
                     <Button
                       variant="outline"
-                      className="hover:cursor-pointer hover:scale-102 transition-transform duration-100 ease-in-out"
                       size="sm"
-                      onClick={() => { setSelected(p); setOpen(true); }}
+                      onClick={(e) => { e.stopPropagation(); openPatient(p); }}
+                      className="hover:cursor-pointer"
                     >
                       View
                     </Button>
