@@ -49,7 +49,7 @@ export default function PatientTable() {
               className="w-64"
             />
             <Select value={filter} onValueChange={(v:Filter)=>setFilter(v)}>
-              <SelectTrigger className="w-[140px]">
+              <SelectTrigger className="w-[140px] hover:cursor-pointer">
                 <SelectValue placeholder="Filter" />
               </SelectTrigger>
               <SelectContent>
@@ -95,6 +95,7 @@ export default function PatientTable() {
                   <TableCell className="text-right">
                     <Button
                       variant="outline"
+                      className="hover:cursor-pointer hover:scale-102 transition-transform duration-100 ease-in-out"
                       size="sm"
                       onClick={() => { setSelected(p); setOpen(true); }}
                     >
