@@ -1,3 +1,4 @@
+import KpiCards from "../components/kpi-cards";
 import PatientTable from "../components/patient-table";
 
 export default function Home() {
@@ -9,6 +10,8 @@ export default function Home() {
           Monitor upcoming refills and prepare outreach. Stage 2 will enable AI calling from here.
         </p>
       </div>
+
+      <KpiCards />
       <PatientTable />
     </div>
   );
