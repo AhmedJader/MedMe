@@ -1,9 +1,15 @@
-
+import PatientTable from "../components/patient-table";
 
 export default function Home() {
   return (
-    <div>
-      <h1 className="text-3xl font-bold underline">Hello, Next.js!</h1>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-xl font-semibold">Patients</h1>
+        <p className="text-sm text-muted-foreground">
+          Monitor upcoming refills and prepare outreach. Stage 2 will enable AI calling from here.
+        </p>
+      </div>
+      <PatientTable />
     </div>
   );
 }
