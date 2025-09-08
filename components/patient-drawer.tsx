@@ -18,6 +18,7 @@ export function PatientDrawer({
   patient: DBPatient | null;
   onOutcome?: (o: { patientId: string; summary?: string; medChange?: string }) => void;
 }) {
+  // Close on ESC
   React.useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === "Escape") onOpenChange(false); }
     if (open) window.addEventListener("keydown", onKey);
@@ -26,21 +27,67 @@ export function PatientDrawer({
 
   const [outcome, setOutcome] = React.useState<any>(null);
 
-  const refreshOutcome = React.useCallback(async () => {
-    if (!patient) return;
-    const r = await fetch(`/api/outcomes?patientId=${patient.id}`);
-    const data = await r.json();
-    if (data.ok) {
-      setOutcome(data.outcome);
-      onOutcome?.({
-        patientId: patient.id,
-        summary: data.outcome?.summary,
-        medChange: data.outcome?.medChange,
-      });
-    }
-  }, [patient?.id, onOutcome]);
+  // Keep a stable ref to the latest onOutcome (don’t let it retrigger effects)
+  const onOutcomeRef = React.useRef(onOutcome);
+  React.useEffect(() => { onOutcomeRef.current = onOutcome; }, [onOutcome]);
 
-  React.useEffect(() => { if (open && patient) refreshOutcome(); }, [open, patient, refreshOutcome]);
+  // Debounce/throttle + in-flight guard
+  const lastFetchRef = React.useRef<{ id: string | null; ts: number; inFlight: boolean }>({
+    id: null, ts: 0, inFlight: false,
+  });
+
+  const refreshOutcome = React.useCallback(
+    async (force = false) => {
+      if (!patient) return;
+      const now = Date.now();
+
+      // 1) block if same patient requested in the last 1200ms (unless forced)
+      const tooSoon =
+        lastFetchRef.current.id === patient.id &&
+        now - lastFetchRef.current.ts < 1200 &&
+        !force;
+
+      if (tooSoon || lastFetchRef.current.inFlight) return;
+
+      lastFetchRef.current = { id: patient.id, ts: now, inFlight: true };
+
+      const ac = new AbortController();
+      try {
+        const r = await fetch(`/api/outcomes?patientId=${patient.id}`, {
+          cache: "no-store",
+          signal: ac.signal,
+        });
+        const data = await r.json();
+        if (data.ok) {
+          setOutcome(data.outcome);
+          onOutcomeRef.current?.({
+            patientId: patient.id,
+            summary: data.outcome?.summary,
+            medChange: data.outcome?.medChange,
+          });
+        }
+      } finally {
+        lastFetchRef.current.inFlight = false;
+      }
+
+      return () => ac.abort();
+    },
+    [patient?.id] // <-- stable: only changes when patientId actually changes
+  );
+
+  // Fetch only when the drawer transitions closed → open OR when patientId changes
+  const prevOpenRef = React.useRef(open);
+  React.useEffect(() => {
+    const wasOpen = prevOpenRef.current;
+    prevOpenRef.current = open;
+    if (open && !wasOpen && patient) {
+      // first open — fetch immediately
+      refreshOutcome(true);
+    } else if (open && patient) {
+      // if patientId changed while open, fetch (debounced by guard)
+      refreshOutcome();
+    }
+  }, [open, patient?.id, refreshOutcome]);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -62,7 +109,9 @@ export function PatientDrawer({
             <div className="rounded-md bg-muted p-3">
               <div className="font-medium mb-1 flex items-center gap-2">
                 <FileText className="h-4 w-4" /> Latest conversation
-                <button onClick={refreshOutcome} className="ml-auto text-xs underline">Refresh</button>
+                <button onClick={() => refreshOutcome(true)} className="ml-auto text-xs underline">
+                  Refresh
+                </button>
               </div>
               {outcome ? (
                 <div className="space-y-1">
@@ -77,7 +126,7 @@ export function PatientDrawer({
             </div>
 
             <div className="pt-2">
-              <CallPatientButton patient={patient} onEnded={refreshOutcome} />
+              <CallPatientButton patient={patient} onEnded={() => refreshOutcome(true)} />
               <p className="text-xs text-muted-foreground mt-2">
                 Web test mode — browser mic only (no phone number).
               </p>

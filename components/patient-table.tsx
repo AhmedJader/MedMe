@@ -29,7 +29,7 @@ export default function PatientTable({ initialPatients }: { initialPatients: DBP
   const [selected, setSelected] = React.useState<DBPatient | null>(null);
 
   // Local patch so the row updates immediately after a call ends
-  const [lastById, setLastById] = React.useState<Record<string, {summary: string|null; medChange: string|null}>>(
+  const [lastById, setLastById] = React.useState<Record<string, { summary: string | null; medChange: string | null }>>(
     () =>
       Object.fromEntries(
         initialPatients.map(p => [
@@ -37,6 +37,18 @@ export default function PatientTable({ initialPatients }: { initialPatients: DBP
           { summary: p.lastSummary ?? p.lastShipmentIssue ?? null, medChange: p.lastMedChange ?? null }
         ])
       )
+  );
+
+  const handleOutcome = React.useCallback(
+    (o: { patientId: string; summary?: string; medChange?: string }) => {
+      setLastById((m) => {
+        const prev = m[o.patientId];
+        const next = { summary: o.summary ?? null, medChange: o.medChange ?? null };
+        if (prev && prev.summary === next.summary && prev.medChange === next.medChange) return m; // no change
+        return { ...m, [o.patientId]: next };
+      });
+    },
+    []
   );
 
   const rows = React.useMemo(() => {
@@ -150,16 +162,12 @@ export default function PatientTable({ initialPatients }: { initialPatients: DBP
         </div>
       </Card>
 
+      {/* ...table... */}
       <PatientDrawer
         open={open}
         onOpenChange={setOpen}
         patient={selected}
-        onOutcome={(o) =>
-          setLastById((m) => ({
-            ...m,
-            [o.patientId]: { summary: o.summary ?? null, medChange: o.medChange ?? null },
-          }))
-        }
+        onOutcome={handleOutcome} // <-- stable identity, no churn
       />
     </>
   );
