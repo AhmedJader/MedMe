@@ -1,35 +1,34 @@
+// components/patient-drawer.tsx
 "use client";
-
 import * as React from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "./ui/sheet";
-import { Button } from "./ui/button";
 import type { Patient } from "../lib/types";
 import { formatDate } from "../lib/utils";
-import { FileText, Phone } from "lucide-react";
+import { FileText } from "lucide-react";
 import { CallPatientButton } from "./CallPatientButton";
 
 export function PatientDrawer({
   open, onOpenChange, patient,
 }: { open: boolean; onOpenChange: (v: boolean) => void; patient: Patient | null }) {
-
-  // Extra safety: close on Esc even if focus is outside the sheet root
   React.useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onOpenChange(false);
-    }
+    function onKey(e: KeyboardEvent) { if (e.key === "Escape") onOpenChange(false); }
     if (open) window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [open, onOpenChange]);
 
+  const [outcome, setOutcome] = React.useState<any>(null);
+  async function refreshOutcome() {
+    if (!patient) return;
+    const r = await fetch(`/api/outcomes?patientId=${patient.id}`);
+    const data = await r.json();
+    if (data.ok) setOutcome(data.outcome);
+  }
+  React.useEffect(() => { if (open && patient) refreshOutcome(); }, [open, patient]);
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent
-        side="right"
-        className="w-full sm:max-w-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-      >
-        <SheetHeader>
-          <SheetTitle>{patient?.name ?? "Patient"}</SheetTitle>
-        </SheetHeader>
+      <SheetContent side="right" className="w-full sm:max-w-lg">
+        <SheetHeader><SheetTitle>{patient?.name ?? "Patient"}</SheetTitle></SheetHeader>
 
         {!patient ? null : (
           <div className="mt-4 space-y-3 text-sm">
@@ -45,26 +44,24 @@ export function PatientDrawer({
 
             <div className="rounded-md bg-muted p-3">
               <div className="font-medium mb-1 flex items-center gap-2">
-                <FileText className="h-4 w-4" /> Last conversation (if any)
+                <FileText className="h-4 w-4" /> Latest conversation
               </div>
-              {patient.lastOutcome ? (
+              {outcome ? (
                 <div className="space-y-1">
-                  <p><span className="text-muted-foreground">Availability:</span> {patient.lastOutcome.availabilityWindow ?? "—"}</p>
-                  <p><span className="text-muted-foreground">Med change:</span> {patient.lastOutcome.medChange ?? "—"}</p>
-                  <p><span className="text-muted-foreground">Shipment issue:</span> {patient.lastOutcome.shipmentIssue ?? "None"}</p>
-                  <p><span className="text-muted-foreground">Summary:</span> {patient.lastOutcome.summary ?? "—"}</p>
+                  <p><span className="text-muted-foreground">Availability:</span> {outcome.availabilityWindow ?? "—"}</p>
+                  <p><span className="text-muted-foreground">Med change:</span> {outcome.medChange ?? "—"}</p>
+                  <p><span className="text-muted-foreground">Shipment issue:</span> {outcome.shipmentIssue ?? "None"}</p>
+                  <p><span className="text-muted-foreground">Summary:</span> {outcome.summary ?? "—"}</p>
                 </div>
               ) : (
-                <p className="text-muted-foreground">No prior AI call on record.</p>
+                <p className="text-muted-foreground">No AI call on record yet.</p>
               )}
+              <button onClick={refreshOutcome} className="text-xs underline mt-2">Refresh</button>
             </div>
 
-            {/* Stage 2 placeholder */}
             <div className="pt-2">
-              <CallPatientButton patient={patient} />
-              <p className="text-xs text-muted-foreground mt-2">
-                Web test mode — browser mic only (no phone number).
-              </p>
+              <CallPatientButton patient={patient} onEnded={() => setTimeout(refreshOutcome, 1500)} />
+              <p className="text-xs text-muted-foreground mt-2">Web test mode — browser mic only (no phone number).</p>
             </div>
           </div>
         )}

@@ -1,28 +1,25 @@
 "use client";
-
 import * as React from "react";
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 import { Card } from "./ui/card";
 import { Button } from "./ui/button";
-import { MOCK_PATIENTS } from "../lib/mock";
 import { refillPriority, formatDate, Priority } from "../lib/utils";
-import type { Patient } from "../lib/types";
 import { StatusBadge } from "./status-badge";
 import { PatientDrawer } from "./patient-drawer";
 
 type Filter = "all" | Priority;
 
-export default function PatientTable() {
+export default function PatientTable({ initialPatients }: { initialPatients: any[] }) {
   const [query, setQuery] = React.useState("");
   const [filter, setFilter] = React.useState<Filter>("all");
   const [open, setOpen] = React.useState(false);
-  const [selected, setSelected] = React.useState<Patient | null>(null);
+  const [selected, setSelected] = React.useState<any | null>(null);
 
   const rows = React.useMemo(() => {
-    return MOCK_PATIENTS
-      .map(p => ({ p, prio: refillPriority(p.nextRefillDate) }))
+    return initialPatients
+      .map((p:any) => ({ p, prio: refillPriority(new Date(p.nextRefillDate).toISOString()) }))
       .filter(({ p, prio }) => {
         const text = (p.name + p.medication).toLowerCase();
         const matchesQ = text.includes(query.toLowerCase());
@@ -35,28 +32,18 @@ export default function PatientTable() {
         if (d !== 0) return d;
         return new Date(a.p.nextRefillDate).getTime() - new Date(b.p.nextRefillDate).getTime();
       });
-  }, [query, filter]);
+  }, [initialPatients, query, filter]);
 
-  function openPatient(p: Patient) {
-    setSelected(p);
-    setOpen(true);
-  }
+  function openPatient(p: any) { setSelected(p); setOpen(true); }
 
   return (
     <>
       <Card className="p-4">
         <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
           <div className="flex items-center gap-3">
-            <Input
-              placeholder="Search patients or meds…"
-              value={query}
-              onChange={(e)=>setQuery(e.target.value)}
-              className="w-64"
-            />
+            <Input placeholder="Search patients or meds…" value={query} onChange={(e)=>setQuery(e.target.value)} className="w-64" />
             <Select value={filter} onValueChange={(v:Filter)=>setFilter(v)}>
-              <SelectTrigger className="w-[140px] hover:cursor-pointer">
-                <SelectValue placeholder="Filter" />
-              </SelectTrigger>
+              <SelectTrigger className="w-[140px] hover:cursor-pointer"><SelectValue placeholder="Filter" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All</SelectItem>
                 <SelectItem value="overdue">Overdue</SelectItem>
@@ -65,9 +52,7 @@ export default function PatientTable() {
               </SelectContent>
             </Select>
           </div>
-          <div className="text-xs text-muted-foreground">
-            Overdue &amp; due-soon are automatically prioritized.
-          </div>
+          <div className="text-xs text-muted-foreground">Overdue &amp; due-soon are automatically prioritized.</div>
         </div>
 
         <div className="mt-4 overflow-hidden rounded-md border">
@@ -83,19 +68,11 @@ export default function PatientTable() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map(({ p, prio }) => (
-                <TableRow
-                  key={p.id}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`Open details for ${p.name}`}
+              {rows.map(({ p, prio }: any) => (
+                <TableRow key={p.id}
+                  role="button" tabIndex={0}
                   onClick={() => openPatient(p)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      e.preventDefault();
-                      openPatient(p);
-                    }
-                  }}
+                  onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPatient(p); }}}
                   className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 >
                   <TableCell>
@@ -104,32 +81,19 @@ export default function PatientTable() {
                   </TableCell>
                   <TableCell>{p.medication}</TableCell>
                   <TableCell>{formatDate(p.nextRefillDate)}</TableCell>
-                  <TableCell>
-                    <StatusBadge priority={prio} dateIso={p.nextRefillDate} />
-                  </TableCell>
+                  <TableCell><StatusBadge priority={prio} dateIso={p.nextRefillDate} /></TableCell>
                   <TableCell className="max-w-[360px]">
-                    <div className="truncate text-muted-foreground">
-                      {p.lastOutcome?.summary ?? p.lastShipmentIssue ?? "—"}
-                    </div>
+                    <div className="truncate text-muted-foreground">{p.lastShipmentIssue ?? "—"}</div>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={(e) => { e.stopPropagation(); openPatient(p); }}
-                      className="hover:cursor-pointer"
-                    >
+                    <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); openPatient(p); }}>
                       View
                     </Button>
                   </TableCell>
                 </TableRow>
               ))}
               {rows.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                    No patients match this filter.
-                  </TableCell>
-                </TableRow>
+                <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">No patients match this filter.</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
