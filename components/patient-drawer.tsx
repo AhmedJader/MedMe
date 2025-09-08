@@ -60,7 +60,7 @@ export function PatientDrawer({
             </div>
 
             <div className="pt-2">
-              <CallPatientButton patient={patient} onEnded={() => setTimeout(refreshOutcome, 1500)} />
+              <CallPatientButton patient={patient} onEnded={refreshOutcome} />
               <p className="text-xs text-muted-foreground mt-2">Web test mode — browser mic only (no phone number).</p>
             </div>
           </div>
