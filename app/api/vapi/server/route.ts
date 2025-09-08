@@ -5,61 +5,34 @@ import { db } from "@/db/db";
 import { conversations, outcomes } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
-/** Safely pull an id for this call, even if the payload shape varies */
+// -------- helpers (unchanged) ----------
 function extractCallId(body: any): string | null {
-  return (
-    body?.call?.id ||
-    body?.call?.callId ||
-    body?.artifact?.call?.id ||           // some Vapi events nest under artifact
-    body?.artifact?.callId ||
-    null
-  );
+  return body?.call?.id || body?.call?.callId || body?.artifact?.call?.id || body?.artifact?.callId || null;
 }
-
-/** Pull assistant variables regardless of nesting */
 function extractVars(body: any): Record<string, any> {
-  return (
-    body?.assistant?.variableValues ||
-    body?.call?.assistantOverrides?.variableValues ||
-    body?.artifact?.assistant?.variableValues ||
-    {}
-  );
+  return body?.assistant?.variableValues
+    || body?.call?.assistantOverrides?.variableValues
+    || body?.artifact?.assistant?.variableValues
+    || {};
 }
-
-/** Get the event type across shapes */
 function extractType(body: any): string | undefined {
   return body?.type || body?.message?.type || body?.event;
 }
-
-/** Normalize tool calls across shapes */
 function extractToolCalls(body: any) {
-  // Vapi sometimes sends toolCalls at different keys
-  const raw =
-    body?.toolCalls ||
-    body?.message?.toolCalls ||
-    body?.toolCallList ||
-    (Array.isArray(body?.toolWithToolCallList)
-      ? body.toolWithToolCallList.map((x: any) => x.toolCall)
-      : []);
-
+  const raw = body?.toolCalls
+    || body?.message?.toolCalls
+    || body?.toolCallList
+    || (Array.isArray(body?.toolWithToolCallList) ? body.toolWithToolCallList.map((x: any) => x.toolCall) : []);
   return (raw || []).map((tc: any) => {
-    const name =
-      tc?.toolName ||
-      tc?.function?.name ||
-      tc?.name ||
-      tc?.tool?.name ||
-      "unknown";
-
+    const name = tc?.toolName || tc?.function?.name || tc?.name || tc?.tool?.name || "unknown";
     const rawArgs = tc?.args ?? tc?.function?.arguments ?? tc?.arguments ?? {};
     let args = rawArgs;
-    if (typeof rawArgs === "string") {
-      try { args = JSON.parse(rawArgs); } catch { args = {}; }
-    }
-
+    if (typeof rawArgs === "string") { try { args = JSON.parse(rawArgs); } catch { args = {}; } }
     const id = tc?.toolCallId || tc?.id || tc?.callId || "";
-    return { name, args, id };
+    return { name, args, id, _raw: tc };
   });
 }
+// ---------------------------------------
 
 export async function POST(req: Request) {
   const body = await req.json();
@@ -70,29 +43,22 @@ export async function POST(req: Request) {
   const patientIdFromVars: string | null = vars?.patientId ?? null;
   const transport = body?.call?.type === "webCall" ? "web" : "pstn";
 
-  // Helpful log (trim giant payloads)
-  try {
-    console.log("VAPI evt:", {
-      type,
-      callId,
-      patientIdFromVars,
-      toolCount:
-        (body?.toolCalls?.length ??
-          body?.message?.toolCalls?.length ??
-          body?.toolCallList?.length ??
-          body?.toolWithToolCallList?.length ??
-          0),
-    });
-  } catch {}
+  console.log("VAPI evt:", {
+    type,
+    callId: callId ?? null,
+    patientIdFromVars: patientIdFromVars ?? null,
+    toolCount:
+      (body?.toolCalls?.length ??
+        body?.message?.toolCalls?.length ??
+        body?.toolCallList?.length ??
+        body?.toolWithToolCallList?.length ??
+        0),
+  });
 
   try {
-    // Ensure a conversation row exists as soon as we can associate a patient+call
+    // If we *do* have a callId + vars, create the conversation up-front
     if (callId && patientIdFromVars) {
-      const existing = await db
-        .select()
-        .from(conversations)
-        .where(eq(conversations.vendorCallId, callId));
-
+      const existing = await db.select().from(conversations).where(eq(conversations.vendorCallId, callId));
       if (!existing.length) {
         await db.insert(conversations).values({
           vendorCallId: callId,
@@ -103,38 +69,36 @@ export async function POST(req: Request) {
       }
     }
 
-    // Handle tool calls (this is where the structured data arrives)
+    // Structured data arrives here
     if (type === "tool-calls") {
       for (const tc of extractToolCalls(body)) {
         if (tc.name !== "submit_patient_outcome") continue;
 
-        const patientId: string =
-          patientIdFromVars || String(tc.args.patientId || "");
+        // We always have this in the tool args (per your prompt)
+        const patientId: string = patientIdFromVars || String(tc.args.patientId || "");
 
-        // If Vapi didn’t echo call info on this event, try to find/create a conversation row now
+        // Find or create a conversation row so FK is satisfied
         let conversationId: string | undefined;
+
         if (callId) {
-          const [conv] = await db
-            .select()
-            .from(conversations)
-            .where(eq(conversations.vendorCallId, callId));
-          if (conv?.id) conversationId = conv.id;
+          const [conv] = await db.select().from(conversations).where(eq(conversations.vendorCallId, callId));
+          conversationId = conv?.id;
         }
 
-        if (!conversationId && patientIdFromVars) {
-          // Create a conversation row with a synthetic vendor id so FK is satisfied
-          const synthetic = `web-${Date.now()}`;
+        // ↙️ NEW: if there was no callId (your case), create a synthetic conversation using the arg patientId
+        if (!conversationId && patientId) {
+          const syntheticVendorId = `tool-${tc.id || Date.now()}`;
           await db.insert(conversations).values({
-            vendorCallId: synthetic,
-            patientId: patientIdFromVars,
+            vendorCallId: syntheticVendorId,
+            patientId,
             transport: "web",
             status: "in_progress",
           });
-          const [conv] = await db
+          const [conv2] = await db
             .select()
             .from(conversations)
-            .where(eq(conversations.vendorCallId, synthetic));
-          conversationId = conv?.id;
+            .where(eq(conversations.vendorCallId, syntheticVendorId));
+          conversationId = conv2?.id;
         }
 
         if (conversationId) {
@@ -149,37 +113,28 @@ export async function POST(req: Request) {
               summary: String(tc.args.summary ?? ""),
               raw: tc.args,
             })
-            .onConflictDoNothing();
+            .onConflictDoNothing(); // retries safe
 
           await db
             .update(conversations)
             .set({ status: "done", endedAt: new Date() })
             .where(eq(conversations.id, conversationId));
+        } else {
+          console.error("VAPI SERVER: could not derive conversationId; payload:", JSON.stringify(tc.args));
         }
 
-        // Acknowledge the tool so the agent proceeds
-        return NextResponse.json({
-          toolCallId: tc.id,
-          result: { ok: true },
-        });
+        // ACK the tool so the agent proceeds
+        return NextResponse.json({ toolCallId: tc.id, result: { ok: true } });
       }
     }
 
-    // Optional transcript/finalization
+    // Optional: end-of-call transcript
     if (type === "end-of-call-report" && callId) {
-      const [conv] = await db
-        .select()
-        .from(conversations)
-        .where(eq(conversations.vendorCallId, callId));
-
+      const [conv] = await db.select().from(conversations).where(eq(conversations.vendorCallId, callId));
       if (conv?.id) {
         await db
           .update(conversations)
-          .set({
-            transcript: body?.artifact?.transcript ?? null,
-            endedAt: new Date(),
-            status: "done",
-          })
+          .set({ transcript: body?.artifact?.transcript ?? null, endedAt: new Date(), status: "done" })
           .where(eq(conversations.id, conv.id));
       }
     }
