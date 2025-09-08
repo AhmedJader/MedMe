@@ -2,7 +2,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { daysUntil } from "../lib/utils";
 import { AlertTriangle, CalendarClock, Snowflake } from "lucide-react";
 
-export default function KpiCards({ patients }: { patients: any[] }) {
+type DBPatient = {
+  nextRefillDate: string;
+  medication: string;
+};
+
+export default function KpiCards({ patients }: { patients: DBPatient[] }) {
   const overdue = patients.filter(p => daysUntil(p.nextRefillDate) < 0).length;
   const dueSoon = patients.filter(p => {
     const d = daysUntil(p.nextRefillDate);
@@ -10,10 +15,14 @@ export default function KpiCards({ patients }: { patients: any[] }) {
   }).length;
   const coldChain = patients.filter(p => /refrigerated/i.test(p.medication)).length;
 
-  const Item = ({ icon: Icon, label, value, tone }:{
-    icon:any; label:string; value:number|string; tone:"red"|"amber"|"blue"
-  }) => {
-    const toneCls = { red:"bg-red-50 text-red-700 border-red-200", amber:"bg-amber-50 text-amber-800 border-amber-200", blue:"bg-sky-50 text-sky-700 border-sky-200" }[tone];
+  const Item = ({
+    icon: Icon, label, value, tone,
+  }: { icon:any; label:string; value:number|string; tone:"red"|"amber"|"blue" }) => {
+    const toneCls = {
+      red: "bg-red-50 text-red-700 border-red-200",
+      amber: "bg-amber-50 text-amber-800 border-amber-200",
+      blue: "bg-sky-50 text-sky-700 border-sky-200",
+    }[tone];
     return (
       <Card className={`border ${toneCls}`}>
         <CardHeader className="flex flex-row items-center justify-between pb-2">

@@ -1,8 +1,15 @@
 "use client";
 import * as React from "react";
 import Vapi from "@vapi-ai/web";
-import type { Patient } from "../lib/types";
 import { Button } from "./ui/button";
+
+// Minimal DB row shape used by the button
+type DBPatient = {
+  id: string;
+  name: string;
+  medication: string;
+  nextRefillDate: string; // page.tsx serializes to ISO string
+};
 
 const vapi = new Vapi(process.env.NEXT_PUBLIC_VAPI_PUBLIC_KEY || "");
 
@@ -10,7 +17,7 @@ export function CallPatientButton({
   patient,
   onEnded,
 }: {
-  patient: Patient;
+  patient: DBPatient;
   onEnded?: () => void;
 }) {
   const assistantId = process.env.NEXT_PUBLIC_VAPI_ASSISTANT_ID || "";
@@ -18,17 +25,16 @@ export function CallPatientButton({
 
   // keep latest onEnded without re-subscribing
   const endedRef = React.useRef(onEnded);
-  React.useEffect(() => {
-    endedRef.current = onEnded;
-  }, [onEnded]);
+  React.useEffect(() => { endedRef.current = onEnded; }, [onEnded]);
 
   React.useEffect(() => {
     const onStart = () => setBusy(true);
-    const onEnd = () => {
-      setBusy(false);
-      endedRef.current?.();
-    };
+    const onEnd = () => { setBusy(false); endedRef.current?.(); };
     const onError = (e: any) => {
+      // Ignore benign Daily "ejected / meeting ended" noise
+      const t = e?.error?.type ?? e?.type;
+      const m = e?.errorMsg ?? e?.msg;
+      if (t === "ejected" || m === "Meeting has ended") return;
       console.error("VAPI error", e);
       setBusy(false);
     };
@@ -37,12 +43,10 @@ export function CallPatientButton({
     vapi.on("call-end", onEnd);
     vapi.on("error", onError);
 
-    // cleanup to prevent MaxListeners warnings
     return () => {
       (vapi as any).removeListener?.("call-start", onStart);
       (vapi as any).removeListener?.("call-end", onEnd);
       (vapi as any).removeListener?.("error", onError);
-      // fallback (older SDKs)
       (vapi as any).events?.off?.("call-start", onStart);
       (vapi as any).events?.off?.("call-end", onEnd);
       (vapi as any).events?.off?.("error", onError);
@@ -56,7 +60,7 @@ export function CallPatientButton({
     }
     await vapi.start(assistantId, {
       variableValues: {
-        patientId: patient.id,
+        patientId: patient.id,            // EXACT id for your tool
         expectedName: patient.name,
         medication: patient.medication,
         nextRefillDate: patient.nextRefillDate,
