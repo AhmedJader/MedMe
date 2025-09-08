@@ -6,6 +6,7 @@ import { Button } from "./ui/button";
 import type { Patient } from "../lib/types";
 import { formatDate } from "../lib/utils";
 import { FileText, Phone } from "lucide-react";
+import { CallPatientButton } from "./CallPatientButton";
 
 export function PatientDrawer({
   open, onOpenChange, patient,
@@ -60,11 +61,9 @@ export function PatientDrawer({
 
             {/* Stage 2 placeholder */}
             <div className="pt-2">
-              <Button variant="secondary" disabled className="gap-2" title="Stage 2: Retell outbound call">
-                <Phone className="h-4 w-4" /> Call patient (AI)
-              </Button>
+              <CallPatientButton patient={patient} />
               <p className="text-xs text-muted-foreground mt-2">
-                Placeholder only. Stage 2 will enable this to trigger the voice agent and persist results.
+                Web test mode — browser mic only (no phone number).
               </p>
             </div>
           </div>
