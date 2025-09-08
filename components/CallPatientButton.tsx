@@ -69,7 +69,7 @@ export function CallPatientButton({
   }
 
   return (
-    <Button className="gap-2" onClick={start} disabled={busy || !assistantId}>
+    <Button className="gap-2 hover:cursor-pointer" onClick={start} disabled={busy || !assistantId}>
       {busy ? "On call…" : "Call patient (web test)"}
     </Button>
   );

@@ -16,8 +16,10 @@ type DBPatient = {
   name: string;
   phoneE164: string;
   medication: string;
-  nextRefillDate: string;           // ISO string (serialized in page.tsx)
-  lastShipmentIssue: string | null; // optional
+  nextRefillDate: string;
+  lastShipmentIssue: string | null;
+  lastSummary: string | null;   // <-- from server (latest outcome)
+  lastMedChange: string | null; // <-- from server (latest outcome)
 };
 
 export default function PatientTable({ initialPatients }: { initialPatients: DBPatient[] }) {
@@ -25,6 +27,17 @@ export default function PatientTable({ initialPatients }: { initialPatients: DBP
   const [filter, setFilter] = React.useState<Filter>("all");
   const [open, setOpen] = React.useState(false);
   const [selected, setSelected] = React.useState<DBPatient | null>(null);
+
+  // Local patch so the row updates immediately after a call ends
+  const [lastById, setLastById] = React.useState<Record<string, {summary: string|null; medChange: string|null}>>(
+    () =>
+      Object.fromEntries(
+        initialPatients.map(p => [
+          p.id,
+          { summary: p.lastSummary ?? p.lastShipmentIssue ?? null, medChange: p.lastMedChange ?? null }
+        ])
+      )
+  );
 
   const rows = React.useMemo(() => {
     return initialPatients
@@ -68,9 +81,7 @@ export default function PatientTable({ initialPatients }: { initialPatients: DBP
               </SelectContent>
             </Select>
           </div>
-          <div className="text-xs text-muted-foreground">
-            Overdue &amp; due-soon are automatically prioritized.
-          </div>
+          <div className="text-xs text-muted-foreground">Overdue &amp; due-soon are automatically prioritized.</div>
         </div>
 
         <div className="mt-4 overflow-hidden rounded-md border">
@@ -86,40 +97,47 @@ export default function PatientTable({ initialPatients }: { initialPatients: DBP
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map(({ p, prio }) => (
-                <TableRow
-                  key={p.id}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => openPatient(p)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPatient(p); }
-                  }}
-                  className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-                >
-                  <TableCell>
-                    <div className="font-medium">{p.name}</div>
-                    <div className="text-xs text-muted-foreground">{p.phoneE164}</div>
-                  </TableCell>
-                  <TableCell>{p.medication}</TableCell>
-                  <TableCell>{formatDate(p.nextRefillDate)}</TableCell>
-                  <TableCell><StatusBadge priority={prio} dateIso={p.nextRefillDate} /></TableCell>
-                  <TableCell className="max-w-[360px]">
-                    <div className="truncate text-muted-foreground">
-                      {p.lastShipmentIssue ?? "—"}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={(e) => { e.stopPropagation(); openPatient(p); }}
-                    >
-                      View
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {rows.map(({ p, prio }) => {
+                const latest = lastById[p.id];
+                const summary = latest?.summary ?? p.lastSummary ?? p.lastShipmentIssue ?? "—";
+                const medChange = latest?.medChange ?? p.lastMedChange ?? null;
+
+                return (
+                  <TableRow
+                    key={p.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openPatient(p)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openPatient(p); }
+                    }}
+                    className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  >
+                    <TableCell>
+                      <div className="font-medium">{p.name}</div>
+                      <div className="text-xs text-muted-foreground">{p.phoneE164}</div>
+                    </TableCell>
+                    <TableCell>{p.medication}</TableCell>
+                    <TableCell>{formatDate(p.nextRefillDate)}</TableCell>
+                    <TableCell><StatusBadge priority={prio} dateIso={p.nextRefillDate} /></TableCell>
+                    <TableCell className="max-w-[420px]">
+                      <div className="truncate text-muted-foreground">{summary}</div>
+                      {medChange && (
+                        <div className="text-[11px] text-muted-foreground mt-0.5">Med change: {medChange}</div>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={(e) => { e.stopPropagation(); openPatient(p); }}
+                      >
+                        View
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
               {rows.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
@@ -132,7 +150,17 @@ export default function PatientTable({ initialPatients }: { initialPatients: DBP
         </div>
       </Card>
 
-      <PatientDrawer open={open} onOpenChange={setOpen} patient={selected} />
+      <PatientDrawer
+        open={open}
+        onOpenChange={setOpen}
+        patient={selected}
+        onOutcome={(o) =>
+          setLastById((m) => ({
+            ...m,
+            [o.patientId]: { summary: o.summary ?? null, medChange: o.medChange ?? null },
+          }))
+        }
+      />
     </>
   );
 }

@@ -6,18 +6,18 @@ import { FileText } from "lucide-react";
 import { CallPatientButton } from "./CallPatientButton";
 
 type DBPatient = {
-  id: string;
-  name: string;
-  phoneE164: string;
-  medication: string;
-  nextRefillDate: string;
-  lastShipmentIssue: string | null;
+  id: string; name: string; phoneE164: string;
+  medication: string; nextRefillDate: string; lastShipmentIssue: string | null;
 };
 
 export function PatientDrawer({
-  open, onOpenChange, patient,
-}: { open: boolean; onOpenChange: (v: boolean) => void; patient: DBPatient | null }) {
-
+  open, onOpenChange, patient, onOutcome,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  patient: DBPatient | null;
+  onOutcome?: (o: { patientId: string; summary?: string; medChange?: string }) => void;
+}) {
   React.useEffect(() => {
     function onKey(e: KeyboardEvent) { if (e.key === "Escape") onOpenChange(false); }
     if (open) window.addEventListener("keydown", onKey);
@@ -30,8 +30,15 @@ export function PatientDrawer({
     if (!patient) return;
     const r = await fetch(`/api/outcomes?patientId=${patient.id}`);
     const data = await r.json();
-    if (data.ok) setOutcome(data.outcome);
-  }, [patient?.id]);
+    if (data.ok) {
+      setOutcome(data.outcome);
+      onOutcome?.({
+        patientId: patient.id,
+        summary: data.outcome?.summary,
+        medChange: data.outcome?.medChange,
+      });
+    }
+  }, [patient?.id, onOutcome]);
 
   React.useEffect(() => { if (open && patient) refreshOutcome(); }, [open, patient, refreshOutcome]);
 
@@ -70,10 +77,7 @@ export function PatientDrawer({
             </div>
 
             <div className="pt-2">
-              <CallPatientButton
-                patient={patient}
-                onEnded={refreshOutcome}  // refresh when call ends
-              />
+              <CallPatientButton patient={patient} onEnded={refreshOutcome} />
               <p className="text-xs text-muted-foreground mt-2">
                 Web test mode — browser mic only (no phone number).
               </p>
